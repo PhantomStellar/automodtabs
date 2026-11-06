@@ -202,6 +202,15 @@ public final class TabConfig {
      */
     public List<String> forceGeneratedTabs = new ArrayList<>();
 
+    /**
+     * Show a notice (log warning + one chat line on world join) when Fabric
+     * API or a Fabric-on-NeoForge bridge is detected, explaining that it may
+     * affect how this mod works depending on how the fabric loader on NeoForge
+     * is implemented. Turn this off once the used loader is known not to cause
+     * issues - the notice does not repeat afterwards. New in 0.5.1.
+     */
+    public boolean fabricLoaderWarning = true;
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
     private static final TabConfig INSTANCE = new TabConfig();
@@ -242,7 +251,7 @@ public final class TabConfig {
         "removeFromOriginalTabs", "removeFromSearch", "moveRecipeOutputs",
         "preserveOriginalTabs", "includeRecipeOutputs", "includeDatapackRecipes",
         "includeCustomRecipeStacks", "groupRecipeOutputsBySource", "deduplicateRecipeOutputs",
-        "debugLogging", "syncFabricCreativeTabNavigation");
+        "debugLogging", "syncFabricCreativeTabNavigation", "fabricLoaderWarning");
     // 'showEmptyTabs' is intentionally NOT a user-facing key: it has no
     // implementation on 26.3 (vanilla hard-hides empty CATEGORY tabs), so it
     // is neither advertised nor drawn, while old configs keep loading it.
@@ -322,6 +331,7 @@ public final class TabConfig {
         deduplicateRecipeOutputs = defaults.deduplicateRecipeOutputs;
         debugLogging = defaults.debugLogging;
         syncFabricCreativeTabNavigation = defaults.syncFabricCreativeTabNavigation;
+        fabricLoaderWarning = defaults.fabricLoaderWarning;
     }
 
     /**
@@ -385,6 +395,7 @@ public final class TabConfig {
                 case "deduplicateRecipeOutputs" -> deduplicateRecipeOutputs = value(key, value);
                 case "debugLogging" -> debugLogging = value(key, value);
                 case "syncFabricCreativeTabNavigation" -> syncFabricCreativeTabNavigation = value(key, value);
+                case "fabricLoaderWarning" -> fabricLoaderWarning = value(key, value);
                 // Lists, comma separated.
                 case "excludeMods" -> excludeMods = toList(value);
                 case "excludeItems" -> excludeItems = toList(value);
@@ -493,6 +504,7 @@ public final class TabConfig {
         this.debugLogging = getBool(json, "debugLogging", this.debugLogging);
         this.syncFabricCreativeTabNavigation = getBool(json, "syncFabricCreativeTabNavigation",
             this.syncFabricCreativeTabNavigation);
+        this.fabricLoaderWarning = getBool(json, "fabricLoaderWarning", this.fabricLoaderWarning);
 
         // Inclusion mode: new key wins; otherwise map the legacy boolean.
         if (hasNewMode) {
@@ -580,6 +592,7 @@ public final class TabConfig {
             json.addProperty("deduplicateRecipeOutputs", this.deduplicateRecipeOutputs);
             json.addProperty("debugLogging", this.debugLogging);
             json.addProperty("syncFabricCreativeTabNavigation", this.syncFabricCreativeTabNavigation);
+            json.addProperty("fabricLoaderWarning", this.fabricLoaderWarning);
             Files.writeString(path, GSON.toJson(json), StandardCharsets.UTF_8);
         } catch (IOException e) {
             AutoModTabs.LOGGER.error("[AutoModTabs] failed to save config to {}", path, e);

@@ -72,7 +72,9 @@ public class TabConfigScreen extends Screen {
             "Log the item/recipe classification report on startup and world join."),
         new Toggle("debugLogging", "Debug logging",
             "Verbose per-item debug logging."),
-        // Page Recipes (indices 6-12)
+        new Toggle("fabricLoaderWarning", "Fabric detection notice",
+            "Show a notice when Fabric API / a Fabric bridge is detected: the loader setup may affect how this mod works (no in-mod fix exists; use the Mods page 'force generated tab' for late-registering namespaces, restart needed). Individual-tab support for Fabric loaders is NOT provided from 0.5.1 on."),
+        // Page Recipes (indices 7-14)
         new Toggle("scanRecipes", "Scan recipes",
             "Scan the active recipe manager for recipe outputs."),
         new Toggle("includeRecipeOutputs", "Show recipe outputs",
@@ -102,16 +104,16 @@ public class TabConfigScreen extends Screen {
         new Toggle("syncFabricCreativeTabNavigation", "Sync creative navigation (Fabric)",
             "EXPERIMENTAL, needs Fabric API: with Fabricated-NeoForge there are two navigation controls on the creative screen; this keeps both bars on the same page. Applies when the creative screen is next opened."));
 
-    // Page -> [from, to) ranges into TOGGLES (0-5 General, 6-12 Recipes,
-    // 13-17 Organization; Mods/Filters/Diagnostics are custom pages,
-    // 18 Compatibility).
+    // Page -> [from, to) ranges into TOGGLES (0-6 General, 7-14 Recipes,
+    // 15-19 Organization; Mods/Filters/Diagnostics are custom pages,
+    // 20 Compatibility).
     private static final int[][] TOGGLE_PAGES = {
-        {0, 6},
-        {6, 13},
-        {13, 18},
+        {0, 7},
+        {7, 14},
+        {14, 19},
         {-1, -1},
         {-1, -1},
-        {18, 19},
+        {19, 20},
         {-1, -1},
     };
 
@@ -337,6 +339,12 @@ public class TabConfigScreen extends Screen {
     }
 
     private int modsPage;
+    /** Session-only Mods page search text; empty shows everything. */
+    private String modsSearch = "";
+    /** True (default) hides mods with zero discoverable registered items. */
+    private boolean modsHideNoItems = true;
+    /** Set before a rebuild so the search box regains keyboard focus. */
+    private boolean modsSearchFocusNext = false;
 
     /** Builds detection info for every loaded mod and item namespace present. */
     private List<DetectedMod> detectMods() {
@@ -395,22 +403,17 @@ public class TabConfigScreen extends Screen {
         return out;
     }
 
-    /** Mods page: forced-namespace field + detection rows (5 per page, paged). */
+    /** Mods page: force field, search/filter bar, then detection rows (15 per page). */
     private void addModsPage(int margin, int usable) {
-        List<DetectedMod> mods = this.detectMods();
-        int perPage = 5;
-        int pageCount = Math.max(1, (mods.size() + perPage - 1) / perPage);
-        this.modsPage = Math.max(0, Math.min(this.modsPage, pageCount - 1));
-
         // (a) Manual inclusion ("force") field - apply-as-text like the other
         // filter fields, with per-entry validation. A forced tab can only be
         // created at registration time (the creative-tab registry freezes),
         // so changes land on the next game start - the feedback says so.
-        this.addRenderableWidget(new StringWidget(margin, 46, usable, 9,
+        this.addRenderableWidget(new StringWidget(margin, 40, usable, 9,
             Component.literal("Force a generated tab for a namespace (applies on next game start)")
                 .withStyle(ChatFormatting.GRAY), this.font));
         TabConfig config = TabConfig.get();
-        EditBox forceBox = new EditBox(this.font, margin, 57, usable - 76, 18, Component.literal(
+        EditBox forceBox = new EditBox(this.font, margin, 50, usable - 76, 18, Component.literal(
             "Comma-separated mod ids that always get a dedicated generated tab"));
         forceBox.setMaxLength(4096);
         forceBox.setValue(String.join(", ", config.forceGeneratedTabs));
@@ -429,22 +432,59 @@ public class TabConfigScreen extends Screen {
                 config.save();
                 this.feedback("forceGeneratedTabs saved - tab layout changes on the next game start");
             })
-            .bounds(margin + usable - 72, 57, 72, 18)
+            .bounds(margin + usable - 72, 50, 72, 18)
             .tooltip(Tooltip.create(Component.literal(
                 "Manual namespace inclusion: forces a dedicated generated tab for mods whose items register after the tab-registration point (e.g. Fabric mods through Fabricated-NeoForge). Restart required.")))
             .build());
 
-        // (b) Detection rows, five per page.
-        this.addRenderableWidget(new StringWidget(margin, 84, usable - 92, 9,
-            Component.literal("Detected mods - the button keeps or withholds the generated tab (live):"),
-            this.font));
+        // (b) Live filter: search + the "mods with items only" toggle. Both
+        // affect only this list view, never discovery itself.
+        String query = this.modsSearch.trim().toLowerCase(java.util.Locale.ROOT);
+        List<DetectedMod> filtered = this.detectMods().stream()
+            .filter(m -> !this.modsHideNoItems || m.itemsTotal() > 0)
+            .filter(m -> query.isEmpty()
+                || m.title().toLowerCase(java.util.Locale.ROOT).contains(query)
+                || m.namespace().toLowerCase(java.util.Locale.ROOT).contains(query))
+            .toList();
+
+        EditBox searchBox = new EditBox(this.font, margin, 74, usable - 320, 18, Component.literal(
+            "Search by mod name or mod id"));
+        searchBox.setMaxLength(256);
+        searchBox.setValue(this.modsSearch);
+        searchBox.setResponder(text -> {
+            this.modsSearch = text;
+            this.modsSearchFocusNext = true;
+            this.modsPage = 0;
+            if (this.minecraft != null) {
+                this.minecraft.execute(this::rebuildWidgets);
+            }
+        });
+        this.addRenderableWidget(searchBox);
+        this.addRenderableWidget(Button.builder(Component.literal(this.modsHideNoItems
+                    ? "With items only: ON" : "With items only: OFF"),
+                b -> {
+                    this.modsHideNoItems = !this.modsHideNoItems;
+                    this.modsPage = 0;
+                    if (this.minecraft != null) {
+                        this.minecraft.execute(this::rebuildWidgets);
+                    }
+                })
+            .bounds(margin + usable - 240, 74, 160, 18)
+            .tooltip(Tooltip.create(Component.literal(
+                "ON (default): hide mods with no discoverable registered items, so the mods holding items are easier to find. OFF: list every loaded mod. View-only: discovery is unaffected.")))
+            .build());
+
+        int perPage = 15;
+        int pageCount = Math.max(1, (filtered.size() + perPage - 1) / perPage);
+        this.modsPage = Math.max(0, Math.min(this.modsPage, pageCount - 1));
+
         Button prev = Button.builder(Component.literal("<"), b -> {
                 this.modsPage--;
                 if (this.minecraft != null) {
                     this.minecraft.execute(this::rebuildWidgets);
                 }
             })
-            .bounds(margin + usable - 88, 82, 20, 14)
+            .bounds(margin + usable - 72, 76, 20, 14)
             .build();
         Button next = Button.builder(Component.literal(">"), b -> {
                 this.modsPage++;
@@ -452,20 +492,27 @@ public class TabConfigScreen extends Screen {
                     this.minecraft.execute(this::rebuildWidgets);
                 }
             })
-            .bounds(margin + usable - 20, 82, 20, 14)
+            .bounds(margin + usable - 20, 76, 20, 14)
             .build();
         prev.active = this.modsPage > 0;
         next.active = this.modsPage < pageCount - 1;
         this.addRenderableWidget(prev);
         this.addRenderableWidget(next);
-        this.addRenderableWidget(new StringWidget(margin + usable - 64, 84, 44, 9,
+        this.addRenderableWidget(new StringWidget(margin + usable - 48, 79, 28, 9,
             Component.literal((this.modsPage + 1) + "/" + pageCount).withStyle(ChatFormatting.GRAY), this.font));
 
+        if (this.modsSearchFocusNext) {
+            this.modsSearchFocusNext = false;
+            searchBox.setFocused(true);
+            this.setFocused(searchBox);
+        }
+
+        // (c) Detection rows, fifteen per page.
         int from = this.modsPage * perPage;
-        int to = Math.min(from + perPage, mods.size());
-        int y = 102;
+        int to = Math.min(from + perPage, filtered.size());
+        int y = 96;
         for (int i = from; i < to; i++) {
-            DetectedMod mod = mods.get(i);
+            DetectedMod mod = filtered.get(i);
             String toolText = mod.title() + " (mod id: " + mod.namespace() + ")\n"
                 + mod.nativeTabDetail()
                 + "\nItems: " + (mod.itemsShownElsewhere() < 0

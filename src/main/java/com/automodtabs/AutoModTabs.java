@@ -66,6 +66,9 @@ public class AutoModTabs {
         // Config keybind (Controls menu shows it under "AutoModTabs").
         modEventBus.addListener(Keybinds::onRegisterKeys);
         NeoForge.EVENT_BUS.addListener(Keybinds::onClientTick);
+        // 0.5.1: one-chat-line notice on world join when Fabric API / a Fabric
+        // bridge is detected (disablable, see TabConfig#fabricLoaderWarning).
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> fabricNoticeTick());
         // In-game config screen behind the mod list's Config button.
         java.util.function.Supplier<IConfigScreenFactory> configScreenFactory =
             () -> new IConfigScreenFactory() {
@@ -77,5 +80,41 @@ public class AutoModTabs {
             };
         container.registerExtensionPoint(IConfigScreenFactory.class, configScreenFactory);
         LOGGER.info("[AutoModTabs] loaded (client only); environment: {}", FabricCompat.describe());
+        if (FabricCompat.mode() != FabricCompat.Mode.PLAIN_NEOFORGE && TabConfig.get().fabricLoaderWarning) {
+            LOGGER.warn("{}", fabricNoticeText(false));
+        }
+    }
+
+    /** Shown at most once per game session; the config flag can silence it. */
+    private static boolean fabricNoticeShown = false;
+
+    /** Fires the in-chat Fabric notice on the first world join of this session. */
+    private static void fabricNoticeTick() {
+        if (fabricNoticeShown) {
+            return;
+        }
+        FabricCompat.Mode mode = FabricCompat.mode();
+        boolean wanted = TabConfig.get().fabricLoaderWarning;
+        if (mode == FabricCompat.Mode.PLAIN_NEOFORGE || !wanted || net.minecraft.client.Minecraft.getInstance().player == null) {
+            if (mode == FabricCompat.Mode.PLAIN_NEOFORGE || !wanted) {
+                fabricNoticeShown = true; // nothing to show this session; never re-check
+            }
+            return;
+        }
+        fabricNoticeShown = true;
+        net.minecraft.client.Minecraft.getInstance().player
+            .sendSystemMessage(net.minecraft.network.chat.Component.literal(fabricNoticeText(true)));
+    }
+
+    /** The notice text; chat variant tells where the setting lives. */
+    private static String fabricNoticeText(boolean forChat) {
+        String base = "[AutoModTabs] Fabric detected (" + FabricCompat.describe()
+            + "): this may affect how the mod works depending on the Fabric loader on NeoForge and how it is implemented. "
+            + "Individual-tab fixes for such loaders are NOT provided (for namespaces registering late, use the Mods page: force a generated tab).";
+        if (forChat) {
+            return base + " If your loader causes no issue, turn this warning off: config screen, General page, "
+                + "'Fabric detection notice' (or config/automodtabs.json key fabricLoaderWarning).";
+        }
+        return base + " Turn off with config option 'fabricLoaderWarning' (General page).";
     }
 }
