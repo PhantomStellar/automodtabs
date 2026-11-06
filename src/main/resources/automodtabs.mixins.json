@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.automodtabs.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": null,
+  "mixins": [],
+  "client": [
+    "NeoForgePagesAccessor",
+    "CreativeScreenNavigationMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

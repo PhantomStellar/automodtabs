@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# NeoForge dev sandbox (worlds, logs, downloaded assets, dev instance jars)
+run/
+
+# Decompiled API reference material (local only, not needed to build)
+api-ref/
+
+# OS
+Thumbs.db
+.DS_Store

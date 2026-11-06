@@ -1,0 +1,80 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+    id 'idea'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+version = mod_version
+group = mod_group_id
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+base {
+    archivesName = mod_id
+}
+
+// Fabric creative-tab API compile-only (the interface used by the optional
+// navigation sync, see NavigationBridgeHooks). Never shipped or required:
+// the mixin config in neoforge.mods.toml only applies when fabric_api is
+// loaded, and runtime classes come from the user's own Fabric API install.
+dependencies {
+    compileOnly(files("libs/fabric-creative-tab-api-v1-5.0.22.jar"))
+}
+
+// Mojang ships Java 25 to end users in 26.3, so mods should target Java 25.
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        client {
+            client()
+            // Auto-join the copied test world so unattended feature tests can
+            // run (DiscoveryReport + recipe scan run off world join).
+            programArgument '--quickPlaySingleLevel'
+            programArgument 'PocketTest'
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+// This block of code expands all declared replace properties in the specified resource targets.
+// A missing property will result in an error. Properties are expanded using ${} Groovy notation.
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+// Include the output of "generateModMetadata" as an input directory for the build
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+java {
+    withSourcesJar()
+}
